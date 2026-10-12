@@ -1,0 +1,12 @@
+{
+  "name": "kells-advisory",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test contact.test.js",
+    "dev": "npx wrangler pages dev dist",
+    "deploy:pages": "npx wrangler pages deploy dist --project-name kells-advisory",
+    "deploy:worker": "npx wrangler deploy"
+  }
+}
