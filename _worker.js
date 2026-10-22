@@ -1,4 +1,4 @@
-const EMAIL = 'tom@categorii.com';
+const EMAIL = 'tom@kellsadvisory.com';
 const MAX_BODY = 16_384;
 const FOCUS = new Set(['Not sure yet', 'Job margin and profitability', 'Pricing or estimating', 'Cash flow and financing scenarios', 'Hiring or growth decisions']);
 const HEADERS = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };

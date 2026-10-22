@@ -24,7 +24,7 @@ form.addEventListener('submit', async event => {
   event.preventDefault();
   if (sending || !form.reportValidity()) return;
   if (location.protocol === 'file:') {
-    status.textContent = 'This preview cannot receive inquiries. Please email tom@categorii.com.';
+    status.textContent = 'This preview cannot receive inquiries. Please email tom@kellsadvisory.com.';
     status.focus(); return;
   }
   sending = true; button.disabled = true; status.textContent = 'Sending your inquiry…';
@@ -34,12 +34,12 @@ form.addEventListener('submit', async event => {
       body: new URLSearchParams(new FormData(form)), signal: AbortSignal.timeout(20000)
     });
     let result;
-    try { result = await response.json(); } catch { throw new Error('The contact form is temporarily unavailable. Please email tom@categorii.com.'); }
-    if (!response.ok || !result.ok || !result.id) throw new Error(result.message || 'We could not confirm receipt. Please email tom@categorii.com.');
+    try { result = await response.json(); } catch { throw new Error('The contact form is temporarily unavailable. Please email tom@kellsadvisory.com.'); }
+    if (!response.ok || !result.ok || !result.id) throw new Error(result.message || 'We could not confirm receipt. Please email tom@kellsadvisory.com.');
     sessionStorage.setItem('kellsInquiryReceived', result.id);
     location.assign('/thank-you');
   } catch (error) {
-    status.textContent = error.name === 'TimeoutError' ? 'Receipt could not be confirmed. Please email tom@categorii.com if you need help.' : error instanceof TypeError ? 'The connection failed. Please try again or email tom@categorii.com.' : error.message || 'We could not confirm receipt. Please email tom@categorii.com.';
+    status.textContent = error.name === 'TimeoutError' ? 'Receipt could not be confirmed. Please email tom@kellsadvisory.com if you need help.' : error instanceof TypeError ? 'The connection failed. Please try again or email tom@kellsadvisory.com.' : error.message || 'We could not confirm receipt. Please email tom@kellsadvisory.com.';
     status.focus();
     sending = false; button.disabled = false;
   }

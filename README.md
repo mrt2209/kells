@@ -4,7 +4,7 @@ The detailed v3 website for Kells Advisory, a new founder-led financial performa
 
 ## Website
 
-`index.html` and the adjacent assets contain the website, favicon, privacy notice, confirmation page and assets. The site uses plain HTML, CSS and JavaScript with no framework, tracking scripts, external fonts or build dependencies. The contact address is **tom@categorii.com**.
+`index.html` and the adjacent assets contain the website, favicon, privacy notice, confirmation page and assets. The site uses plain HTML, CSS and JavaScript with no framework, tracking scripts, external fonts or build dependencies. The contact address is **tom@kellsadvisory.com**.
 
 ## Cloudflare Pages deployment
 
@@ -38,7 +38,7 @@ Email notifications require an email delivery service. The shared handler suppor
 
 - `RESEND_API_KEY`: **secret**, supplied by the user; never commit it.
 - `CONTACT_FROM`: a sender address on a domain verified in Resend.
-- `CONTACT_EMAIL`: `tom@categorii.com` (this is also the default).
+- `CONTACT_EMAIL`: `tom@kellsadvisory.com` (this is also the default).
 
 After enabling notifications, submit an explicitly labeled test inquiry and confirm both the D1 row and receipt in the destination inbox. Provider failure does not lose an inquiry: it remains in D1 with `notification_status='failed'`. Until a provider is configured, rows have `not_configured` and must be reviewed in D1. A provider accepting an email is not proof of inbox delivery.
 
