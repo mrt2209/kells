@@ -2,6 +2,9 @@ const EMAIL = 'tom@kellsadvisory.com';
 const MAX_BODY = 16_384;
 const FOCUS = new Set(['Not sure yet', 'Job margin and profitability', 'Pricing or estimating', 'Cash flow and financing scenarios', 'Hiring or growth decisions']);
 const HEADERS = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
+// Where saved inquiries are delivered: Tom's CRM. Override with CRM_INQUIRY_URL.
+const CRM_INQUIRY_URL = 'https://step-forward-crm.replit.app/api/site-inquiries/hook';
+const SIGNATURE_WINDOW_S = 300;
 
 function reply(request, status, message, id) {
   if (request.headers.get('accept')?.includes('application/json')) {
@@ -38,6 +41,51 @@ function field(form, key, max, required = false) {
   return value;
 }
 
+// The CRM and this site share one secret (SITE_INQUIRY_SECRET). Every request
+// between them carries an HMAC of a purpose-specific string, so a signed push
+// cannot be replayed as a pull, and the secret itself never travels.
+const encoder = new TextEncoder();
+const hmacKey = (secret, usage) => crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, [usage]);
+const signedText = (kind, timestamp, payload) => encoder.encode(`kells-inquiry-${kind}.v1.${timestamp}.${payload}`);
+
+export async function signInquiry(secret, kind, timestamp, payload) {
+  const signature = await crypto.subtle.sign('HMAC', await hmacKey(secret, 'sign'), signedText(kind, timestamp, payload));
+  return [...new Uint8Array(signature)].map(n => n.toString(16).padStart(2, '0')).join('');
+}
+
+async function signatureValid(secret, kind, timestamp, payload, header) {
+  if (!/^v1=[0-9a-f]{64}$/.test(header || '')) return false;
+  const bytes = new Uint8Array(header.slice(3).match(/../g).map(pair => parseInt(pair, 16)));
+  return crypto.subtle.verify('HMAC', await hmacKey(secret, 'verify'), bytes, signedText(kind, timestamp, payload));
+}
+
+// Hand a saved inquiry to the CRM. A failure loses nothing: the CRM also pulls
+// recent inquiries from /api/inquiries whenever it runs.
+// Trimmed here and in the CRM, so a pasted trailing newline cannot make two
+// identical secrets disagree.
+const inquirySecret = env => String(env.SITE_INQUIRY_SECRET || '').trim();
+
+async function deliverToCrm(inquiry, env, send, now) {
+  const secret = inquirySecret(env);
+  if (!secret) return 'not_configured';
+  const body = JSON.stringify(inquiry);
+  const timestamp = String(Math.floor(now() / 1000));
+  try {
+    const result = await send(env.CRM_INQUIRY_URL || CRM_INQUIRY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Kells-Timestamp': timestamp, 'X-Kells-Signature': `v1=${await signInquiry(secret, 'push', timestamp, body)}` },
+      body,
+      // The CRM sleeps when idle; this request is what wakes it.
+      signal: AbortSignal.timeout(25_000)
+    });
+    if (!result.ok) console.error(`Kells CRM delivery failed: HTTP ${result.status}`);
+    return result.ok ? 'delivered' : 'failed';
+  } catch {
+    console.error('Kells CRM delivery failed');
+    return 'failed';
+  }
+}
+
 export async function handleContact(request, env, dependencies = {}) {
   const notify = dependencies.fetch || fetch;
   const now = dependencies.now || Date.now;
@@ -67,6 +115,7 @@ export async function handleContact(request, env, dependencies = {}) {
   }
 
   const id = crypto.randomUUID();
+  const createdAt = new Date(now()).toISOString().replace(/\.\d{3}Z$/, 'Z');
   try {
     const hour = Math.floor(now() / 3_600_000);
     const ip = request.headers.get('cf-connecting-ip') || 'unknown';
@@ -80,7 +129,7 @@ export async function handleContact(request, env, dependencies = {}) {
     ]);
     if (limits.some(result => !result.success)) throw new Error('database-rate-error');
     if (limits.some(result => result.meta?.changes !== 1)) return reply(request, 429, 'Too many inquiries have been submitted recently. Please try again later or email us directly.');
-    const saved = await env.INQUIRIES.prepare('INSERT INTO inquiries (id,name,email,company,focus,message) VALUES (?1,?2,?3,?4,?5,?6)').bind(id, data.name, data.email, data.company, data.focus, data.message).run();
+    const saved = await env.INQUIRIES.prepare('INSERT INTO inquiries (id,created_at,name,email,company,focus,message) VALUES (?1,?2,?3,?4,?5,?6,?7)').bind(id, createdAt, data.name, data.email, data.company, data.focus, data.message).run();
     if (!saved.success || saved.meta?.changes !== 1) throw new Error('database-write-error');
   } catch {
     // Never log inquiry content, personal details or provider credentials.
@@ -102,6 +151,9 @@ export async function handleContact(request, env, dependencies = {}) {
     } catch { /* Inquiry is already stored. */ }
     try { await env.INQUIRIES.prepare('UPDATE inquiries SET notification_status=?1 WHERE id=?2').bind(status,id).run(); } catch { console.error('Kells notification status update failed'); }
   }
+  // Off the visitor's critical path when the runtime allows it.
+  const delivery = deliverToCrm({ id, created_at: createdAt, ...data }, env, notify, now);
+  if (dependencies.waitUntil) dependencies.waitUntil(delivery); else await delivery;
   try {
     await env.INQUIRIES.batch([
       env.INQUIRIES.prepare('DELETE FROM contact_rate_limits WHERE expires_at < ?1').bind(Math.floor(now()/1000)),
@@ -113,9 +165,35 @@ export async function handleContact(request, env, dependencies = {}) {
 
 
 
+// GET /api/inquiries?since=<ISO time>: recent inquiries for the CRM, newest
+// first. Exists only when SITE_INQUIRY_SECRET is set, and answers only a
+// request signed with it within the last five minutes.
+export async function handleInquiryList(request, env, dependencies = {}) {
+  const now = dependencies.now || Date.now;
+  const secret = inquirySecret(env);
+  if (!secret || !env.INQUIRIES || (env.CF_PAGES_BRANCH && env.CF_PAGES_BRANCH !== 'main')) return new Response(null, { status: 404, headers: HEADERS });
+  if (request.method !== 'GET') return new Response(null, { status: 405, headers: { ...HEADERS, Allow: 'GET' } });
+  const since = new URL(request.url).searchParams.get('since') || '';
+  const timestamp = request.headers.get('x-kells-timestamp') || '';
+  if (!/^\d{10}$/.test(timestamp) || Math.abs(now() / 1000 - Number(timestamp)) > SIGNATURE_WINDOW_S
+      || !(await signatureValid(secret, 'pull', timestamp, since, request.headers.get('x-kells-signature')))) {
+    return Response.json({ ok: false }, { status: 401, headers: HEADERS });
+  }
+  if (since && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(since)) return Response.json({ ok: false }, { status: 400, headers: HEADERS });
+  try {
+    const { results } = await env.INQUIRIES.prepare('SELECT id, created_at, name, email, company, focus, message FROM inquiries WHERE created_at >= ?1 ORDER BY created_at DESC LIMIT 200').bind(since || '1970-01-01T00:00:00Z').all();
+    return Response.json({ ok: true, inquiries: results || [] }, { headers: HEADERS });
+  } catch {
+    console.error('Kells inquiry listing failed');
+    return Response.json({ ok: false }, { status: 503, headers: HEADERS });
+  }
+}
+
 export default {
-  async fetch(request, env) {
-    if (new URL(request.url).pathname === '/api/contact') return handleContact(request, env);
+  async fetch(request, env, ctx) {
+    const { pathname } = new URL(request.url);
+    if (pathname === '/api/contact') return handleContact(request, env, ctx ? { waitUntil: promise => ctx.waitUntil(promise) } : {});
+    if (pathname === '/api/inquiries') return handleInquiryList(request, env);
     const response = await env.ASSETS.fetch(request);
     const secured = new Response(response.body, response);
     secured.headers.set('X-Content-Type-Options', 'nosniff');

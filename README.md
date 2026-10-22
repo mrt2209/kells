@@ -25,7 +25,15 @@ The existing `kells` Worker can deploy the same site without blocking Pages setu
 
 ## Contact form and email delivery
 
-Valid inquiries are stored privately in D1. The form validates required fields and contact permission on the server, limits body size, rejects duplicate fields and cross-origin submissions, checks a honeypot, and applies atomic per-address and global hourly submission limits. It never displays success if saving fails. Raw IP addresses are not stored; short-lived hourly hashes are used for rate limits. There is no public inquiry-reading endpoint, and no credentials belong in this repository.
+Valid inquiries are stored privately in D1. The form validates required fields and contact permission on the server, limits body size, rejects duplicate fields and cross-origin submissions, checks a honeypot, and applies atomic per-address and global hourly submission limits. It never displays success if saving fails. Raw IP addresses are not stored; short-lived hourly hashes are used for rate limits. No credentials belong in this repository.
+
+### Delivery to the CRM
+
+Each saved inquiry is also handed to Tom's CRM (`https://step-forward-crm.replit.app`), which files it as a Kells contact, puts it at the top of Today and emails an alert. Set one secret, `SITE_INQUIRY_SECRET`, to the **same value** in the Cloudflare Pages project (production, type Secret) and in the CRM's Replit secrets, then redeploy both. Without it nothing is sent and `/api/inquiries` does not exist.
+
+- **Push:** after the row is saved, the worker POSTs it to `CRM_INQUIRY_URL` (default `https://step-forward-crm.replit.app/api/site-inquiries/hook`) in the background, so the visitor never waits on the CRM. The request also wakes the CRM if it is asleep.
+- **Pull:** `GET /api/inquiries?since=<ISO time>` returns up to 200 recent inquiries, newest first. The CRM calls it whenever its scheduler runs, so an inquiry whose push failed still arrives.
+- **Signing:** both requests carry `X-Kells-Timestamp` (Unix seconds) and `X-Kells-Signature: v1=<hex HMAC-SHA256>` of `kells-inquiry-<push|pull>.v1.<timestamp>.<payload>`, where the payload is the JSON body for a push and the `since` value for a pull. Requests older than five minutes are refused. The secret itself never travels.
 
 Review inquiries in the database console:
 
