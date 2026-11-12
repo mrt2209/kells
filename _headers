@@ -7,3 +7,6 @@
 
 /thank-you*
   X-Robots-Tag: noindex, nofollow
+
+/quickbooks-disconnected*
+  X-Robots-Tag: noindex, nofollow
