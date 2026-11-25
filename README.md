@@ -4,7 +4,7 @@ The detailed v3 website for Kells Advisory, a new founder-led financial performa
 
 ## Website
 
-`index.html` and the adjacent assets contain the website, favicon, privacy notice, confirmation page and assets. The site uses plain HTML, CSS and JavaScript with no framework, external fonts or build dependencies. The one outside script is the Google tag for Tag Manager container GTM-WSDD8HW9, loaded in every page head with its setup in `gtag-init.js`; `_headers` allows the Google Tag Manager, Google Analytics and Google Ads hosts the container uses in the Content-Security-Policy, and nothing else. If a new tag is added in Tag Manager, check the browser console on the live site for blocked requests and add only the hosts it needs. The contact address is **tom@kellsadvisory.com**.
+`index.html` and the adjacent assets contain the website, favicon, privacy notice, confirmation page and assets. The site uses plain HTML, CSS and JavaScript with no framework, external fonts or build dependencies. The outside scripts are the Google tag for Tag Manager container GTM-WSDD8HW9, with its setup in `gtag-init.js`, and the Meta Pixel 1122568867506679 in `meta-pixel.js`. Both load in every page head, and `thank-you.js` sends the pixel a `Lead` event after a confirmed inquiry. Meta's automatic data matching is not turned on, so no form details go to Meta; `_headers` allows the Google Tag Manager, Google Analytics, Google Ads and Meta Pixel hosts these use in the Content-Security-Policy, and nothing else. If a new tag is added in Tag Manager, check the browser console on the live site for blocked requests and add only the hosts it needs. The contact address is **tom@kellsadvisory.com**.
 
 ## Cloudflare Pages deployment
 
